@@ -190,7 +190,9 @@ async function loadModel(key){
     } else loader.load(src.url, res, undefined, rej);
   });
   const root = gltf.scene;
-  const fm = {cork: [], tatami: [], tile: [], wall: [], pegboard: []};
+  // Collect one list of materials per switchable finish, straight from the variant table.
+  const fm = {};
+  for (const kind in (FLOORS && FLOORS.variants) || {}) fm[kind] = [];
   root.traverse(o => {
     if (!o.isMesh) return;
     o.userData.category = o.userData.category || 'fixture';
