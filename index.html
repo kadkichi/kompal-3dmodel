@@ -276,6 +276,8 @@ const qs = new URLSearchParams(location.search);
 const COARSE = matchMedia('(pointer: coarse)').matches;
 const MODE = qs.get('mode') === 'pc' ? 'pc' : qs.get('mode') === 'staff' ? 'staff' : (COARSE ? 'staff' : 'pc');
 $('app').dataset.mode = MODE;
+// the phone shell is always the light look: the model and its buttons are drawn for a light ground
+if (MODE === 'staff') document.documentElement.dataset.theme = 'light';
 if (MODE === 'staff') $('sheet-slot').appendChild($('floors'));
 
 const canvas = $('c'), stage = $('stage');
