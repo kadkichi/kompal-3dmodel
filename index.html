@@ -235,17 +235,17 @@ canvas{display:block;width:100%;height:100%;touch-action:none}
     <div id="staff">
       <div id="st-top">
         <span class="seg">
-          <input type="radio" name="stmode" id="st-walk" value="walk" checked><label for="st-walk">歩く</label>
-          <input type="radio" name="stmode" id="st-over" value="over"><label for="st-over">上から</label>
+          <input type="radio" name="stmode" id="st-over" value="over" checked><label for="st-over">上から</label>
+          <input type="radio" name="stmode" id="st-walk" value="walk"><label for="st-walk">歩く</label>
         </span>
         <button type="button" id="st-gear" title="仕上げを変える">⚙</button>
       </div>
-      <div id="joy"><div id="joy-knob"></div></div>
-      <button type="button" id="st-run">走る</button>
+      <div id="joy" hidden><div id="joy-knob"></div></div>
+      <button type="button" id="st-run" hidden>走る</button>
       <div id="st-card" hidden>
-        <h2>金春湯の中を歩いてみる</h2>
-        <p>左のスティックで歩きます。画面をなぞると見回せます。右下の「走る」で速くなります。</p>
-        <p>右上の「上から」で全体を見られます。歯車から床や壁の色を変えられます。</p>
+        <h2>金春湯の新しい中を見る</h2>
+        <p>指でなぞると回転、2本指で拡大・移動。右上の「歩く」にすると中を歩けます（左のスティックで移動、画面をなぞって見回し）。</p>
+        <p>歯車から床や壁の色を変えられます。</p>
         <button type="button" id="st-ok">はじめる</button>
       </div>
       <div id="st-portrait">スマホを横向きにしてください<br><small>横画面で歩けます</small></div>
@@ -639,7 +639,7 @@ renderer.setAnimationLoop(() => { walkStep(); if (!walking) controls.update(); r
 
 async function boot(){
   if (MODE === 'staff') {
-    await showModel('full'); await startWalk();
+    await showModel('cutaway'); views['v-over']();
     let seen = false; try { seen = !!localStorage.getItem('komparu-staff-seen'); } catch (e) {}
     $('st-card').hidden = seen;
   } else showModel('full');
