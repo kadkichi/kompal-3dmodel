@@ -106,8 +106,8 @@ canvas{display:block;width:100%;height:100%;touch-action:none}
 #st-card h2{margin:0;font-size:16px}
 #st-card p{margin:0;font-size:14px;color:var(--ink-2)}
 #st-card button{background:var(--accent);color:var(--accent-ink);border-color:var(--accent);padding:10px;font-size:15px}
-#st-portrait{position:absolute;inset:0;display:none;place-items:center;background:var(--bg);color:var(--ink);text-align:center;padding:24px;font-size:16px;line-height:1.7;z-index:8}
-@media (orientation: portrait){ [data-mode=staff] #st-portrait{display:grid} }
+#st-portrait{position:absolute;left:50%;top:max(60px,calc(env(safe-area-inset-top) + 60px));transform:translateX(-50%);background:var(--surface);color:var(--ink);border:1px solid var(--line);border-radius:8px;padding:8px 14px;font-size:13px;box-shadow:0 2px 10px rgba(0,0,0,.15);white-space:nowrap;display:none}
+@media (orientation: portrait){ [data-mode=staff] #st-portrait.show{display:block} }
 #sheet{position:absolute;inset:0;background:rgba(0,0,0,.28)}
 #sheet[hidden]{display:none}
 #sheet .body{position:absolute;left:0;right:0;bottom:0;max-height:78%;background:var(--surface);border-radius:14px 14px 0 0;padding:12px 16px calc(16px + env(safe-area-inset-bottom));overflow-y:auto;box-shadow:0 -4px 20px rgba(0,0,0,.2);display:flex;flex-direction:column;gap:8px}
@@ -248,7 +248,7 @@ canvas{display:block;width:100%;height:100%;touch-action:none}
         <p>歯車から床や壁の色を変えられます。</p>
         <button type="button" id="st-ok">はじめる</button>
       </div>
-      <div id="st-portrait">スマホを横向きにしてください<br><small>横画面で歩けます</small></div>
+      <div id="st-portrait">横向きにすると歩きやすいです</div>
       <div id="sheet" hidden>
         <div class="body">
           <div class="head">床と壁を変える<button type="button" id="sheet-close">閉じる</button></div>
@@ -630,7 +630,7 @@ if (MODE === 'staff') {
     if (!e.target.checked) return;
     const walk = e.target.value === 'walk';
     $('joy').hidden = $('st-run').hidden = !walk;
-    if (walk) await startWalk(); else { stopWalk(); await showModel('cutaway'); views['v-over'](); }
+    if (walk) { await startWalk(); const t = $('st-portrait'); t.classList.add('show'); setTimeout(() => t.classList.remove('show'), 3500); } else { stopWalk(); await showModel('cutaway'); views['v-over'](); }
   });
   $('st-ok').addEventListener('click', () => { $('st-card').hidden = true; try { localStorage.setItem('komparu-staff-seen', '1'); } catch (e) {} });
 }
