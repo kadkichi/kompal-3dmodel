@@ -90,6 +90,7 @@ canvas{display:block;width:100%;height:100%;touch-action:none}
 /* staff shell */
 [data-mode=staff] header,[data-mode=staff] #note,[data-mode=staff] #side,[data-mode=staff] #side-open,[data-mode=staff] #walkhud{display:none!important}
 [data-mode=pc] #staff{display:none!important}
+#app[data-mode=staff]{grid-template-rows:minmax(0,1fr)}
 #staff{position:absolute;inset:0;pointer-events:none;z-index:4;font-size:15px}
 #staff > *{pointer-events:auto}
 #st-top{position:absolute;top:max(10px,env(safe-area-inset-top));right:max(10px,env(safe-area-inset-right));display:flex;gap:8px;align-items:center}
