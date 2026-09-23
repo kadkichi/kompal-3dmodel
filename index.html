@@ -59,7 +59,13 @@ canvas{display:block;width:100%;height:100%;touch-action:none}
 #cmt li .loc{color:var(--ink-2);font-family:var(--mono);font-size:11px;display:block}
 #cmt .row{display:flex;gap:6px}
 #cmt textarea{width:100%;height:120px;margin-top:8px;font:12px/1.4 var(--mono);border:1px solid var(--line);border-radius:6px;background:var(--surface-2);color:var(--ink);padding:6px}
-#btn-cmt.on{background:var(--accent);color:var(--accent-ink);border-color:var(--accent)}
+#btn-cmt.on,#btn-walk.on{background:var(--accent);color:var(--accent-ink);border-color:var(--accent)}
+#walkhud{position:absolute;inset:0;pointer-events:none;z-index:4}
+#walkhud .wk-bar{pointer-events:auto;position:absolute;left:50%;top:14px;transform:translateX(-50%);display:flex;align-items:center;gap:12px;background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:8px 12px;box-shadow:0 2px 10px rgba(0,0,0,.12);max-width:calc(100vw - 32px);flex-wrap:wrap}
+#walkhud .wk-tip{font-size:12px;color:var(--ink-2)}
+#walkhud .wk-pad{pointer-events:auto;position:absolute;left:16px;bottom:16px;display:grid;justify-items:center;gap:6px}
+#walkhud .wk-pad div{display:flex;gap:6px}
+#walkhud .wk-pad button{width:54px;height:54px;font-size:18px;border-radius:10px;background:var(--surface);opacity:.92}
 #loading{position:absolute;inset:0;display:grid;place-items:center;color:var(--ink-2);font-size:13px;background:var(--canvas)}
 #loading[hidden]{display:none}
 #lock{position:fixed;inset:0;z-index:5;display:grid;place-items:center;background:var(--bg);padding:16px}
@@ -107,6 +113,7 @@ canvas{display:block;width:100%;height:100%;touch-action:none}
       <button type="button" id="v-entry">入口から</button>
       <button type="button" id="v-lobby">ロビー目線</button>
       <button type="button" id="v-counter">カウンター前</button>
+      <button type="button" id="btn-walk">歩いて見る</button>
     </div>
     <span class="spacer"></span>
     <div class="group"><button type="button" id="btn-cmt">コメント</button><button type="button" id="btn-fit">全体に合わせる</button></div>
@@ -146,6 +153,17 @@ canvas{display:block;width:100%;height:100%;touch-action:none}
       <ol id="cmt-list"></ol>
       <div class="row"><button type="button" id="cmt-copy">書き出す</button><button type="button" id="cmt-clear">全部消す</button></div>
       <textarea id="cmt-out" hidden readonly></textarea>
+    </div>
+    <div id="walkhud" hidden>
+      <div class="wk-bar">
+        <strong>歩いて見るモード</strong>
+        <span class="wk-tip" id="wk-tip">画面をクリックしてから、W A S D または矢印キーで移動。マウスで見回します。Shiftで速歩き。</span>
+        <button type="button" id="wk-exit">終了</button>
+      </div>
+      <div class="wk-pad" id="wk-pad" hidden>
+        <button type="button" data-d="f">▲</button>
+        <div><button type="button" data-d="l">◀</button><button type="button" data-d="b">▼</button><button type="button" data-d="r">▶</button></div>
+      </div>
     </div>
     <div id="loading">3Dモデルを読み込んでいます…</div>
   </div>
@@ -207,6 +225,7 @@ async function loadModel(key){
   });
   const root = gltf.scene;
   // Collect one list of materials per switchable finish, straight from the variant table.
+  const solids = [], floors = [];
   const fm = {};
   for (const kind in (FLOORS && FLOORS.variants) || {}) fm[kind] = [];
   root.traverse(o => {
@@ -215,8 +234,10 @@ async function loadModel(key){
     o.material = o.material.clone();
     if (o.material.transparent) { o.material.depthWrite = false; o.material.opacity = Math.max(o.material.opacity, .04); }
     if (fm[o.material.name]) fm[o.material.name].push(o.material);
+    (o.userData.category === 'floor' ? floors : solids).push(o);
   });
   root.userData.floorMats = fm;
+  root.userData.solids = solids; root.userData.floors = floors;
   models[key] = root;
   return root;
 }
@@ -322,6 +343,105 @@ function resize(){
 new ResizeObserver(resize).observe(stage); resize();
 initFloors();
 views['v-over']();
+// --- Walk-through: first person, so staff can judge the space at eye level ---
+const EYE = 1.55, STEP = .32;
+let walking = false, dragLook = false, yaw = 0, pitch = 0, savedCam = null, savedTgt = null;
+const keys = {}, padDir = {};
+const clock = new THREE.Clock();
+const down = new THREE.Raycaster(), ahead = new THREE.Raycaster();
+const DOWN = new THREE.Vector3(0, -1, 0), UP = new THREE.Vector3(0, 1, 0);
+function applyLook(){ camera.quaternion.setFromEuler(new THREE.Euler(pitch, yaw, 0, 'YXZ')); }
+function floorAt(x, z, from){
+  if (!current) return null;
+  down.set(new THREE.Vector3(x, from, z), DOWN); down.far = 6;
+  const h = down.intersectObjects(current.userData.floors || [], false)[0];
+  return h ? h.point.y : null;
+}
+function hitsWall(from, dir, dist){
+  if (!current) return false;
+  ahead.set(from, dir); ahead.far = dist + STEP;
+  return ahead.intersectObjects(current.userData.solids || [], false).length > 0;
+}
+function startWalk(){
+  if (walking) return;
+  const full = document.getElementById('m-full');
+  if (full && !full.checked) { full.checked = true; showModel('full'); }
+  savedCam = camera.position.clone(); savedTgt = controls.target.clone();
+  controls.enabled = false;
+  camera.position.set(.6, EYE, -7.45); yaw = -Math.PI / 2; pitch = 0; applyLook();
+  const y = floorAt(.6, -7.45, 4); if (y !== null) camera.position.y = y + EYE;
+  walking = true;
+  document.getElementById('walkhud').hidden = false;
+  document.getElementById('btn-walk').classList.add('on');
+  const touch = matchMedia('(pointer: coarse)').matches;
+  document.getElementById('wk-pad').hidden = !touch;
+  document.getElementById('wk-tip').textContent = touch
+    ? '画面をなぞって見回し、左下のボタンで移動します。'
+    : '画面をクリックしてから、W A S D または矢印キーで移動。マウスで見回します。Shiftで速歩き。';
+  if (!touch) { try { canvas.requestPointerLock?.(); } catch (e) {} }
+}
+function stopWalk(){
+  if (!walking) return;
+  walking = false;
+  if (document.pointerLockElement === canvas) document.exitPointerLock();
+  document.getElementById('walkhud').hidden = true;
+  document.getElementById('btn-walk').classList.remove('on');
+  controls.enabled = true;
+  if (savedCam) { camera.position.copy(savedCam); controls.target.copy(savedTgt); controls.update(); }
+}
+document.getElementById('btn-walk').addEventListener('click', () => walking ? stopWalk() : startWalk());
+document.getElementById('wk-exit').addEventListener('click', stopWalk);
+addEventListener('keydown', e => {
+  if (e.key === 'Escape' && walking) { stopWalk(); return; }
+  if (walking) keys[e.key.toLowerCase()] = true;
+});
+addEventListener('keyup', e => { keys[e.key.toLowerCase()] = false; });
+canvas.addEventListener('click', () => {
+  if (walking && !matchMedia('(pointer: coarse)').matches) { try { canvas.requestPointerLock?.(); } catch (e) {} }
+});
+// if the browser will not give us pointer lock, dragging looks around instead
+canvas.addEventListener('pointerdown', e => { if (walking && e.pointerType === 'mouse' && document.pointerLockElement !== canvas) dragLook = true; });
+addEventListener('pointerup', () => dragLook = false);
+addEventListener('mousemove', e => {
+  if (!walking) return;
+  if (document.pointerLockElement !== canvas && !dragLook) return;
+  yaw -= e.movementX * .0022; pitch = Math.max(-1.2, Math.min(1.2, pitch - e.movementY * .0022)); applyLook();
+});
+let lastT = null;
+canvas.addEventListener('touchstart', e => { if (walking) lastT = e.touches[0]; }, {passive: true});
+canvas.addEventListener('touchmove', e => {
+  if (!walking || !lastT) return;
+  const t = e.touches[0];
+  yaw -= (t.clientX - lastT.clientX) * .005;
+  pitch = Math.max(-1.2, Math.min(1.2, pitch - (t.clientY - lastT.clientY) * .005));
+  lastT = t; applyLook();
+}, {passive: true});
+for (const b of document.querySelectorAll('#wk-pad button')) {
+  const d = b.dataset.d;
+  for (const ev of ['pointerdown', 'pointerenter']) b.addEventListener(ev, e => { if (e.buttons || e.type === 'pointerdown') padDir[d] = true; });
+  for (const ev of ['pointerup', 'pointerleave', 'pointercancel']) b.addEventListener(ev, () => padDir[d] = false);
+}
+function walkStep(){
+  const dt = Math.min(clock.getDelta(), .1);
+  if (!walking) return;
+  const f = (keys.w || keys.arrowup || padDir.f ? 1 : 0) - (keys.s || keys.arrowdown || padDir.b ? 1 : 0);
+  const r = (keys.d || keys.arrowright || padDir.r ? 1 : 0) - (keys.a || keys.arrowleft || padDir.l ? 1 : 0);
+  if (f || r) {
+    const fwd = new THREE.Vector3(); camera.getWorldDirection(fwd); fwd.y = 0; fwd.normalize();
+    const rgt = new THREE.Vector3().crossVectors(fwd, UP).normalize();
+    const mv = fwd.multiplyScalar(f).add(rgt.multiplyScalar(r)).normalize()
+      .multiplyScalar((keys.shift ? 3.0 : 1.5) * dt);
+    const base = new THREE.Vector3(camera.position.x, camera.position.y - EYE + .95, camera.position.z);
+    for (const ax of ['x', 'z']) {          // slide along walls instead of sticking
+      if (!mv[ax]) continue;
+      const d = new THREE.Vector3(); d[ax] = Math.sign(mv[ax]);
+      if (!hitsWall(base, d, Math.abs(mv[ax]))) camera.position[ax] += mv[ax];
+    }
+  }
+  const y = floorAt(camera.position.x, camera.position.z, camera.position.y + 1.2);
+  if (y !== null) camera.position.y += (y + EYE - camera.position.y) * Math.min(1, dt * 12);
+}
+
 // --- 3D comments: click a spot, get a pin in the same coordinates as the 2D tool ---
 const CMT_KEY = 'komparu-3d-comments-v1';
 const pinGroup = new THREE.Group(); scene.add(pinGroup);
@@ -393,7 +513,7 @@ document.getElementById('cmt-copy').addEventListener('click', () => {
 });
 drawPins();
 
-renderer.setAnimationLoop(() => { controls.update(); renderer.render(scene, camera); });
+renderer.setAnimationLoop(() => { walkStep(); if (!walking) controls.update(); renderer.render(scene, camera); });
 
 async function unlock(password){
   const b = s => Uint8Array.from(atob(s), c => c.charCodeAt(0));
