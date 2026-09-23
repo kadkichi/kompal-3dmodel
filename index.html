@@ -158,7 +158,7 @@ canvas{display:block;width:100%;height:100%;touch-action:none}
       <div class="wk-bar">
         <strong>歩いて見るモード</strong>
         <span class="wk-tip" id="wk-tip">画面をクリックしてから、W A S D または矢印キーで移動。マウスで見回します。Shiftで速歩き。</span>
-        <button type="button" id="wk-exit">終了</button>
+        <button type="button" id="wk-exit">終了（Esc）</button>
       </div>
       <div class="wk-pad" id="wk-pad" hidden>
         <button type="button" data-d="f">▲</button>
@@ -234,7 +234,8 @@ async function loadModel(key){
     o.material = o.material.clone();
     if (o.material.transparent) { o.material.depthWrite = false; o.material.opacity = Math.max(o.material.opacity, .04); }
     if (fm[o.material.name]) fm[o.material.name].push(o.material);
-    (o.userData.category === 'floor' ? floors : solids).push(o);
+    if (o.userData.category === 'floor') floors.push(o);
+    else if (!(/noren|swing_door/i.test(o.name) && !/wall/i.test(o.name))) solids.push(o);   // you walk through noren and swing doors
   });
   root.userData.floorMats = fm;
   root.userData.solids = solids; root.userData.floors = floors;
@@ -376,8 +377,8 @@ function startWalk(){
   const touch = matchMedia('(pointer: coarse)').matches;
   document.getElementById('wk-pad').hidden = !touch;
   document.getElementById('wk-tip').textContent = touch
-    ? '画面をなぞって見回し、左下のボタンで移動します。'
-    : '画面をクリックしてから、W A S D または矢印キーで移動。マウスで見回します。Shiftで速歩き。';
+    ? '画面をなぞって見回し、左下のボタンで移動します。終了は右上の「終了」ボタンです。'
+    : '画面をクリックしてから、W A S D または矢印キーで移動。マウスで見回します。Shiftで速歩き。Escキーで終了します。';
   if (!touch) { try { canvas.requestPointerLock?.(); } catch (e) {} }
 }
 function stopWalk(){
