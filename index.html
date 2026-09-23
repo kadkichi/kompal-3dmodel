@@ -159,7 +159,7 @@ canvas{display:block;width:100%;height:100%;touch-action:none}
   </header>
   <div id="stage">
     <canvas id="c"></canvas>
-    <div id="note">ドラッグで回転、ホイールで拡大、右ドラッグ／2本指で移動。壁は3.68m、未指定の高さは仮設定です。</div>
+    <div id="note">ドラッグで回転、ホイールでマウス位置へズーム、右ドラッグで移動。W A S D／Q E でカメラごと前後左右上下（Shiftで速く）、ダブルクリックで回転の中心をそこに。</div>
 
     <aside id="side">
       <div class="tabs">
@@ -207,7 +207,7 @@ canvas{display:block;width:100%;height:100%;touch-action:none}
         <div class="hint">2点をクリックすると距離が出ます。</div>
         <ol id="meas-list"></ol>
         <hr>
-        <div class="hint">キー：1 入口から　3 ロビー目線　7 真上　F 全体　W A S D 歩く</div>
+        <div class="hint">キー：1 入口から　3 ロビー目線　7 真上　F 全体<br>W A S D：前後左右　Q E：下上　Shift：速く　ダブルクリック：回転の中心をそこに</div>
       </section>
       <section data-tab="info" hidden>
         <div class="hint">部品をクリックすると名前と寸法が出ます。</div>
@@ -288,6 +288,8 @@ const camera = new THREE.PerspectiveCamera(45, 1, .05, 300);
 const controls = new OrbitControls(camera, canvas);
 controls.enableDamping = true; controls.dampingFactor = .12;
 controls.maxPolarAngle = Math.PI * .495;
+// zoom toward the mouse (like Blender), never collapse onto the target
+controls.zoomToCursor = true; controls.minDistance = .3; controls.maxDistance = 90;
 
 function cssVar(n){ return getComputedStyle(document.documentElement).getPropertyValue(n).trim(); }
 function applyTheme(){ scene.background = new THREE.Color(cssVar('--canvas')); }
@@ -476,7 +478,8 @@ const typing = () => /^(INPUT|TEXTAREA|SELECT)$/.test(document.activeElement?.ta
 addEventListener('keydown', e => {
   if (typing()) return;
   if (e.key === 'Escape' && walking) { stopWalk(); return; }
-  if (walking) { keys[e.key.toLowerCase()] = true; return; }
+  keys[e.key.toLowerCase()] = true;
+  if (walking) return;
   if (MODE !== 'pc') return;
   const k = e.key.toLowerCase();
   if (k === '1') views['v-entry'](); else if (k === '3') views['v-lobby'](); else if (k === '7') views['v-top'](); else if (k === 'f') views['btn-fit']();
@@ -632,7 +635,29 @@ if (MODE === 'staff') {
   $('st-ok').addEventListener('click', () => { $('st-card').hidden = true; try { localStorage.setItem('komparu-staff-seen', '1'); } catch (e) {} });
 }
 
-renderer.setAnimationLoop(() => { walkStep(); if (!walking) controls.update(); renderer.render(scene, camera); });
+// orbit mode: keys move camera and target together, so zooming in never leaves you stuck near the pivot
+function orbitFly(dt){
+  const f = (keys.w || keys.arrowup ? 1 : 0) - (keys.s || keys.arrowdown ? 1 : 0);
+  const r = (keys.d || keys.arrowright ? 1 : 0) - (keys.a || keys.arrowleft ? 1 : 0);
+  const u = (keys.e ? 1 : 0) - (keys.q ? 1 : 0);
+  if (!f && !r && !u) return;
+  const fwd = new THREE.Vector3(); camera.getWorldDirection(fwd); fwd.y = 0; if (fwd.lengthSq() < 1e-6) fwd.set(0, 0, -1); fwd.normalize();
+  const rgt = new THREE.Vector3().crossVectors(fwd, UP).normalize();
+  const dist = camera.position.distanceTo(controls.target);
+  const speed = Math.max(1.5, Math.min(12, dist * .8)) * (keys.shift ? 3 : 1) * dt;
+  const mv = fwd.multiplyScalar(f).add(rgt.multiplyScalar(r)).add(new THREE.Vector3(0, u, 0)).normalize().multiplyScalar(speed);
+  camera.position.add(mv); controls.target.add(mv);
+}
+canvas.addEventListener('dblclick', e => {
+  if (walking || !current || MODE !== 'pc') return;
+  const b = canvas.getBoundingClientRect();
+  ptr.set(((e.clientX - b.left) / b.width) * 2 - 1, -((e.clientY - b.top) / b.height) * 2 + 1);
+  ray.setFromCamera(ptr, camera);
+  const hit = ray.intersectObject(current, true).filter(h => h.object.visible)[0];
+  if (hit) controls.target.copy(hit.point);
+});
+const flyClock = new THREE.Clock();
+renderer.setAnimationLoop(() => { walkStep(); if (!walking) { orbitFly(Math.min(flyClock.getDelta(), .1)); controls.update(); } renderer.render(scene, camera); });
 
 async function boot(){
   if (MODE === 'staff') {
