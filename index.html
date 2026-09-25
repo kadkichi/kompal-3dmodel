@@ -125,13 +125,9 @@ canvas{display:block;width:100%;height:100%;touch-action:none}
   html,body{height:auto;overflow:visible;background:#fff;color:#111;-webkit-print-color-adjust:exact;print-color-adjust:exact}
   #app,#lock{display:none!important}
   #printsheet{display:block;width:277mm}
-  #printsheet img{display:block;width:277mm;height:160mm;object-fit:contain;border:.3mm solid #999}
-  #printsheet .pt-block{display:flex;justify-content:space-between;align-items:flex-end;gap:8mm;margin-top:3mm;border-top:.5mm solid #111;padding-top:2mm;font-family:var(--font)}
-  #printsheet .pt-name{font-size:14pt;font-weight:700;line-height:1.25}
-  #printsheet .pt-sub{font-size:8pt;color:#555;margin-top:1mm}
-  #printsheet dl{display:grid;grid-template-columns:auto auto;gap:.6mm 4mm;margin:0;font-size:8pt;text-align:right}
-  #printsheet dt{color:#555}
-  #printsheet dd{margin:0;font-family:var(--mono);font-variant-numeric:tabular-nums}
+  #printsheet img{display:block;width:277mm;height:180mm;object-fit:contain}
+  #printsheet .pt-name{font-size:10pt;margin-top:2mm;font-family:var(--font)}
+  #printsheet .pt-name:empty{display:none}
 }
 #lock{position:fixed;inset:0;z-index:9;display:grid;place-items:center;background:var(--bg);padding:16px}
 #lock[hidden]{display:none}
@@ -227,10 +223,10 @@ canvas{display:block;width:100%;height:100%;touch-action:none}
         <hr>
         <div class="hint">キー：1 入口から　3 ロビー目線　7 真上　F 全体<br>W A S D：前後左右　Q E：下上　Shift：速く　ダブルクリック：回転の中心をそこに</div>
         <hr>
-        <label>印刷する図名</label>
-        <input type="text" id="print-title" value="内観パース" maxlength="40">
+        <label>図名（任意）</label>
+        <input type="text" id="print-title" value="" maxlength="40" placeholder="空欄なら画だけ刷ります">
         <div class="row"><button type="button" id="btn-print2">今の画をA4で印刷</button></div>
-        <div class="hint">今見ている画をA4横で刷ります。印刷ダイアログで「PDFに保存」も選べます。背景は白で出ます。<br>Artifactの埋め込みで印刷ダイアログが出ないときは、公開ページかローカルで開いてください。</div>
+        <div class="hint">今見ている画をA4横いっぱいに刷ります。背景は白。印刷ダイアログで「PDFに保存」も選べます。<br>Artifactの埋め込みで印刷ダイアログが出ないときは、公開ページかローカルで開いてください。</div>
       </section>
       <section data-tab="info" hidden>
         <div class="hint">部品をクリックすると名前と寸法が出ます。</div>
@@ -283,17 +279,7 @@ canvas{display:block;width:100%;height:100%;touch-action:none}
 </div>
 <div id="printsheet">
   <img id="print-img" alt="">
-  <div class="pt-block">
-    <div>
-      <div class="pt-name" id="pt-name">内観パース</div>
-      <div class="pt-sub">金春湯　3Dモデル　縮尺なし（透視図）／壁は3.68m、未指定の高さは仮設定です</div>
-    </div>
-    <dl>
-      <dt>バージョン</dt><dd id="pt-ver">v47</dd>
-      <dt>視点（図面座標）</dt><dd id="pt-eye">—</dd>
-      <dt>作成日</dt><dd id="pt-date">—</dd>
-    </dl>
-  </div>
+  <div class="pt-name" id="pt-name"></div>
 </div>
 <script type="importmap">
 {"imports":{"three":"https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js","three/addons/":"https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"}}
@@ -478,7 +464,7 @@ views['v-over']();
 
 // ---- printing: the current view on A4 landscape, with a title block ----
 // The image area is 277 x 160 mm; rendering it at 200 dpi keeps edges crisp on paper.
-const PRINT_W = 2181, PRINT_H = 1260;
+const PRINT_W = 2181, PRINT_H = 1417;
 async function printView(){
   if (!current) return;
   const keepRatio = renderer.getPixelRatio(), keepAspect = camera.aspect;
@@ -492,11 +478,7 @@ async function printView(){
   scene.background = keepBg;
   renderer.setPixelRatio(keepRatio); renderer.setSize(keep.x, keep.y, false);
   camera.aspect = keepAspect; camera.updateProjectionMatrix(); resize();
-  const p = camera.position;
-  $('pt-name').textContent = ($('print-title').value || '内観パース').trim();
-  $('pt-ver').textContent = document.querySelector('h1 small').textContent;
-  $('pt-eye').textContent = `x=${(p.x * 45.2 + 337).toFixed(0)} y=${(931 + p.z * 45.2).toFixed(0)} 高さ${p.y.toFixed(2)}m`;
-  $('pt-date').textContent = new Date().toLocaleDateString('ja-JP');
+  $('pt-name').textContent = $('print-title').value.trim();   // empty title prints the picture alone
   const img = $('print-img'); img.src = url;
   try { await img.decode(); } catch (e) {}
   window.print();
