@@ -80,6 +80,7 @@ canvas{display:block;width:100%;height:100%;touch-action:none}
 #side li .loc{color:var(--ink-2);font-family:var(--mono);font-size:11px;display:block}
 #side textarea{width:100%;height:110px;font:12px/1.4 var(--mono);border:1px solid var(--line);border-radius:6px;background:var(--surface-2);color:var(--ink);padding:6px}
 #side input[type=range]{width:100%;accent-color:var(--accent)}
+#side input[type=text]{width:100%;font:inherit;font-size:13px;padding:5px 7px;border:1px solid var(--line);border-radius:6px;background:var(--surface-2);color:var(--ink)}
 #side label.chk{display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer}
 #side input[type=checkbox]{accent-color:var(--accent);margin:0}
 #info-name{word-break:break-all}
@@ -117,6 +118,21 @@ canvas{display:block;width:100%;height:100%;touch-action:none}
 #sheet #floors input[type=color]{width:58px;height:32px}
 #sheet button{padding:12px 18px;font-size:16px}
 
+/* printing: the sheet replaces the app on paper. A4 landscape, image over a title block. */
+#printsheet{display:none}
+@media print{
+  @page{size:A4 landscape;margin:10mm}
+  html,body{height:auto;overflow:visible;background:#fff;color:#111;-webkit-print-color-adjust:exact;print-color-adjust:exact}
+  #app,#lock{display:none!important}
+  #printsheet{display:block;width:277mm}
+  #printsheet img{display:block;width:277mm;height:160mm;object-fit:contain;border:.3mm solid #999}
+  #printsheet .pt-block{display:flex;justify-content:space-between;align-items:flex-end;gap:8mm;margin-top:3mm;border-top:.5mm solid #111;padding-top:2mm;font-family:var(--font)}
+  #printsheet .pt-name{font-size:14pt;font-weight:700;line-height:1.25}
+  #printsheet .pt-sub{font-size:8pt;color:#555;margin-top:1mm}
+  #printsheet dl{display:grid;grid-template-columns:auto auto;gap:.6mm 4mm;margin:0;font-size:8pt;text-align:right}
+  #printsheet dt{color:#555}
+  #printsheet dd{margin:0;font-family:var(--mono);font-variant-numeric:tabular-nums}
+}
 #lock{position:fixed;inset:0;z-index:9;display:grid;place-items:center;background:var(--bg);padding:16px}
 #lock[hidden]{display:none}
 #lock form{width:min(360px,100%);background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:24px;display:grid;gap:12px}
@@ -156,7 +172,7 @@ canvas{display:block;width:100%;height:100%;touch-action:none}
       <button type="button" id="btn-walk">歩いて見る</button>
     </div>
     <span class="spacer"></span>
-    <div class="group"><button type="button" id="btn-fit">全体に合わせる</button></div>
+    <div class="group"><button type="button" id="btn-fit">全体に合わせる</button><button type="button" id="btn-print">印刷</button></div>
   </header>
   <div id="stage">
     <canvas id="c"></canvas>
@@ -210,6 +226,11 @@ canvas{display:block;width:100%;height:100%;touch-action:none}
         <ol id="meas-list"></ol>
         <hr>
         <div class="hint">キー：1 入口から　3 ロビー目線　7 真上　F 全体<br>W A S D：前後左右　Q E：下上　Shift：速く　ダブルクリック：回転の中心をそこに</div>
+        <hr>
+        <label>印刷する図名</label>
+        <input type="text" id="print-title" value="内観パース" maxlength="40">
+        <div class="row"><button type="button" id="btn-print2">今の画をA4で印刷</button></div>
+        <div class="hint">今見ている画をA4横で刷ります。印刷ダイアログで「PDFに保存」も選べます。背景は白で出ます。<br>Artifactの埋め込みで印刷ダイアログが出ないときは、公開ページかローカルで開いてください。</div>
       </section>
       <section data-tab="info" hidden>
         <div class="hint">部品をクリックすると名前と寸法が出ます。</div>
@@ -258,6 +279,20 @@ canvas{display:block;width:100%;height:100%;touch-action:none}
       </div>
     </div>
     <div id="loading">3Dモデルを読み込んでいます…</div>
+  </div>
+</div>
+<div id="printsheet">
+  <img id="print-img" alt="">
+  <div class="pt-block">
+    <div>
+      <div class="pt-name" id="pt-name">内観パース</div>
+      <div class="pt-sub">金春湯　3Dモデル　縮尺なし（透視図）／壁は3.68m、未指定の高さは仮設定です</div>
+    </div>
+    <dl>
+      <dt>バージョン</dt><dd id="pt-ver">v47</dd>
+      <dt>視点（図面座標）</dt><dd id="pt-eye">—</dd>
+      <dt>作成日</dt><dd id="pt-date">—</dd>
+    </dl>
   </div>
 </div>
 <script type="importmap">
@@ -440,6 +475,33 @@ function resize(){ const w = stage.clientWidth, h = stage.clientHeight; renderer
 new ResizeObserver(resize).observe(stage); resize();
 initFloors();
 views['v-over']();
+
+// ---- printing: the current view on A4 landscape, with a title block ----
+// The image area is 277 x 160 mm; rendering it at 200 dpi keeps edges crisp on paper.
+const PRINT_W = 2181, PRINT_H = 1260;
+async function printView(){
+  if (!current) return;
+  const keepRatio = renderer.getPixelRatio(), keepAspect = camera.aspect;
+  const keep = new THREE.Vector2(); renderer.getSize(keep);
+  const keepBg = scene.background;
+  renderer.setPixelRatio(1); renderer.setSize(PRINT_W, PRINT_H, false);
+  camera.aspect = PRINT_W / PRINT_H; camera.updateProjectionMatrix();
+  scene.background = new THREE.Color(0xffffff);         // paper, not the screen's grey ground
+  renderer.render(scene, camera);                       // read the buffer in the same task, before it is cleared
+  const url = canvas.toDataURL('image/png');
+  scene.background = keepBg;
+  renderer.setPixelRatio(keepRatio); renderer.setSize(keep.x, keep.y, false);
+  camera.aspect = keepAspect; camera.updateProjectionMatrix(); resize();
+  const p = camera.position;
+  $('pt-name').textContent = ($('print-title').value || '内観パース').trim();
+  $('pt-ver').textContent = document.querySelector('h1 small').textContent;
+  $('pt-eye').textContent = `x=${(p.x * 45.2 + 337).toFixed(0)} y=${(931 + p.z * 45.2).toFixed(0)} 高さ${p.y.toFixed(2)}m`;
+  $('pt-date').textContent = new Date().toLocaleDateString('ja-JP');
+  const img = $('print-img'); img.src = url;
+  try { await img.decode(); } catch (e) {}
+  window.print();
+}
+for (const id of ['btn-print', 'btn-print2']) $(id).addEventListener('click', printView);
 
 // ---- sidebar tabs (PC) ----
 let activeTab = 'finish';
