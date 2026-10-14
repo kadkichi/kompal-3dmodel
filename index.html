@@ -201,6 +201,7 @@ canvas{display:block;width:100%;height:100%;touch-action:none}
           <label>有孔ボード<select id="f-pegboard"></select></label>
           <label>ボードの色<input type="color" id="c-pegboard"></label>
           <label>カウンター<select id="f-tile"></select></label>
+          <label>カウンタータイルの色<input type="color" id="c-tile"></label>
           <hr>
           <span class="lbl">脱衣場</span>
           <label>床<select id="f-floor_changing"></select></label>
@@ -208,6 +209,10 @@ canvas{display:block;width:100%;height:100%;touch-action:none}
           <label>壁<select id="f-wall_changing"></select></label>
           <label>壁の色<input type="color" id="c-wall_changing"></label>
           <label>浴室前の床<select id="f-floor_wet"></select></label>
+          <label>床の色<input type="color" id="c-floor_wet"></label>
+          <hr>
+          <span class="lbl">外観</span>
+          <label>外壁タイルの色<input type="color" id="c-mosaic"></label>
         </div>
         <div class="row"><button type="button" class="fin-reset">初期値に戻す</button></div>
       </section>
@@ -349,6 +354,7 @@ async function loadModel(key){
   const root = gltf.scene;
   const solids = [], floors = [], mats = [], fm = {};
   for (const kind in (FLOORS && FLOORS.variants) || {}) fm[kind] = [];
+  for (const k of TINT_ONLY) fm[k] = [];
   root.traverse(o => {
     if (!o.isMesh) return;
     o.userData.category = o.userData.category || 'fixture';
@@ -384,7 +390,9 @@ for (const r of document.querySelectorAll('input[name=model]')) r.addEventListen
 
 // ---- finishes ----
 const floorSel = {}, tintSel = {}, texCache = {};
-const TINTABLE = ['pegboard', 'wall_entry', 'wall_lobby', 'wall_changing', 'floor_doma', 'floor_entry', 'floor_changing'];
+const TINTABLE = ['pegboard', 'wall_entry', 'wall_lobby', 'wall_changing', 'floor_doma', 'floor_entry', 'floor_changing',
+                  'tile', 'floor_wet', 'mosaic'];
+const TINT_ONLY = ['mosaic'];   // tinted but with no pattern to choose, so they carry no dropdown
 const LINKED = {floor_entry: ['floor_entry', 'floor_doma']};
 function saveFinish(){ try { localStorage.setItem('komparu-floor', JSON.stringify(floorSel)); localStorage.setItem('komparu-tint', JSON.stringify(tintSel)); } catch (e) {} }
 function syncFinishUI(){
@@ -430,9 +438,8 @@ function applyFloors(root){
   if (!root || !FLOORS || !FLOORS.variants) return;
   const fm = root.userData.floorMats || {};
   for (const kind in fm) {
-    if (!floorSel[kind]) continue;
-    const tex = floorTex(kind, floorSel[kind]);
-    fm[kind].forEach(m => { m.map = tex; if (tintSel[kind]) m.color.set(tintSel[kind]); m.needsUpdate = true; });
+    const tex = floorSel[kind] ? floorTex(kind, floorSel[kind]) : null;   // tint-only kinds keep their own texture
+    fm[kind].forEach(m => { if (tex) m.map = tex; if (tintSel[kind]) m.color.set(tintSel[kind]); m.needsUpdate = true; });
   }
 }
 
